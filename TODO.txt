@@ -1,0 +1,20 @@
+Software Plans:
+Web server: 
+    Uses: gevent, tornado, or twisted
+    Sends data at a given interval
+    starts/stops rep rap commands:
+        go to home
+        emergency stop
+        take set of xy points on plate, go to them
+        calibrate
+Rep Rap control:
+    Straightforward except for events/signals. Every action should be interruptible.
+    Threading is obvious choice, or something like gevent. Only one thing
+    is happening at a time
+Imaging and analysis:
+    opencv for everything
+    take picture
+    analyze to find colonies
+Combining things:
+    Combine rep rap move + imaging into convenience functions
+
