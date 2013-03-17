@@ -73,7 +73,7 @@ def run_gcode(gcode_path):
 
     # Set resonable defaults for port, verbosity, and reset.
     verbose = 1
-    baud = 250000 
+    baud = 250000
     reset = True
     if os.name == "posix":
         port = "/dev/ttyUSB0"
@@ -161,3 +161,6 @@ def processfile(filename,sender,verbose):
         datafile.close()
 
     return 0
+
+if __name__=='main':
+    pass

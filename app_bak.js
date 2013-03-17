@@ -48,12 +48,7 @@ MyApp.prototype.start = function() {
                          function(err,resp){
       });
     });
-    this_app.data_picture_button.addEventListener('click',function(){
-      this_app.sendEvent('forward',{cmd: 'data_picture',uuid: this_app.myuuid},
-                         function(err,resp){
-      });
-    });
-    this_app.x_up_button.addEventListener('click',function(){
+/**    this_app.x_up_button.addEventListener('click',function(){
       this_app.sendEvent('forward',{cmd: 'x_up',uuid: this_app.myuuid},
                          function(err,resp){
       });
@@ -83,13 +78,14 @@ MyApp.prototype.start = function() {
                          function(err,resp){
       });
     });
-
+**/
     this_app.dash.loadScript(
       "http://www.humblesoftware.com//static/js/flotr2.min.js",
       function(){
         this_app.Flotr = Flotr; //save ref to library
         this_app.update();
     });
+
   });
   this.setUpdateInterval(1*1000);
 };
@@ -130,16 +126,15 @@ MyApp.prototype.getAllElements = function(){
   this.picture = this.getElement("picture");
   this.stop_button = this.getElement("stop");
   this.start_button = this.getElement("start");
-  this.data_picture_button = this.getElement("data_picture");
   this.victory_button = this.getElement("victory");
   this.home_button = this.getElement("home");
-  this.x_up_button = this.getElement("x_up");
-  this.x_down_button = this.getElement("x_down");
-  this.y_up_button = this.getElement("y_up");
-  this.y_down_button = this.getElement("y_down");
-  this.z_up_button = this.getElement("z_up");
-  this.z_down_button = this.getElement("z_down");
 
+//  this.x_up_button = this.getElement("x_up");
+//  this.x_down_button = this.getElement("x_down");
+//  this.y_up_button = this.getElement("y_up");
+//  this.y_down_button = this.getElement("y_down");
+//  this.z_up_button = this.getElement("z_up");
+//  this.z_down_button = this.getElement("z_down");
 };
 
 //spec says app needs to be named App
