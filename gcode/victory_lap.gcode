@@ -1,7 +1,8 @@
-P91
-G0 X200 F3000
-G0 Y100
+P90
+G92 X0 Z0 Y0
+G0 X150 F3000
+G0 Y150
 G0 X0
 G0 Y0
-P90     ; restore absolute positioning
+P90
 M84

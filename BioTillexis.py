@@ -55,11 +55,14 @@ reprap_moving = Event()
 g = Group()
 
 # openCV - camera setup
-vid = cv2.VideoCapture(-1)
+#vid = cv2.VideoCapture(-1)
+cam = cv.CaptureFromCAM(-1)
+cv.SetCaptureProperty(cam, cv.CV_CAP_PROP_FRAME_WIDTH, 640)
+cv.SetCaptureProperty(cam, cv.CV_CAP_PROP_FRAME_HEIGHT, 360)
 #cv.SetCaptureProperty(capture, cv.CV_CAP_PROP_FRAME_WIDTH, 1280)
 #cv.SetCaptureProperty(capture, cv.CV_CAP_PROP_FRAME_HEIGHT, 720)
-#cv.SetCaptureProperty(capture, cv.CV_CAP_PROP_FRAME_WIDTH, 480)
-#cv.SetCaptureProperty(capture, cv.CV_CAP_PROP_FRAME_HEIGHT, 270)
+#cv.SetCaptureProperty(capture, cv.CV_CAP_PROP_FRAME_WIDTH, 640)
+#cv.SetCaptureProperty(capture, cv.CV_CAP_PROP_FRAME_HEIGHT, 360)
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -96,43 +99,36 @@ def index():
             g.add(gevent.spawn(do_victory_lap))
         return ''
     elif action == 'home':
-        print 'got home!'
         if not reprap_moving.is_set():
             reprap_moving.set()
             g.add(gevent.spawn(do_home))
         return ''
     elif action == 'x_up':
-        print 'got x up!'
         if not reprap_moving.is_set():
             reprap_moving.set()
             g.add(gevent.spawn(do_x_up))
         return ''
     elif action == 'x_down':
-        print 'got x down!'
         if not reprap_moving.is_set():
             reprap_moving.set()
             g.add(gevent.spawn(do_x_down))
         return ''
     elif action == 'y_up':
-        print 'got y up!'
         if not reprap_moving.is_set():
             reprap_moving.set()
             g.add(gevent.spawn(do_y_up))
         return ''
     elif action == 'y_down':
-        print 'got y down!'
         if not reprap_moving.is_set():
             reprap_moving.set()
             g.add(gevent.spawn(do_y_down))
         return ''
     elif action == 'z_up':
-        print 'got z up!'
         if not reprap_moving.is_set():
             reprap_moving.set()
             g.add(gevent.spawn(do_z_up))
         return ''
     elif action == 'z_down':
-        print 'got z down!'
         if not reprap_moving.is_set():
             reprap_moving.set()
             g.add(gevent.spawn(do_z_down))
@@ -144,10 +140,17 @@ def index():
 
 def start_logging():
     while logging.is_set():
-        if not vid.isOpened():
-            vid.open(-1)
-        flag, im_array = vid.read()
-        img = cv.fromarray(im_array)
+        gevent.sleep(0)
+#        # This causes a memory leak - flag and im_array are not garbage collected
+#        # or 'vid.read()' is storing pictures.
+#        if not vid.isOpened():
+#            vid.open(-1)
+#        flag, im_array = vid.read()
+#        img = cv.fromarray(im_array)
+#        cam = cv.CaptureFromCAM(-1)
+        cv.WaitKey(100)
+        img = cv.QueryFrame(cam)
+        cv.WaitKey(10)
         cv.SaveImage('static/cam.jpeg', img)
         cmd_str = '/manager.php?action=storeBig&uuid='
         url = manager_ip + ':' + manager_port + cmd_str + device_uuid
@@ -159,7 +162,8 @@ def start_logging():
         handle.close()
         cv.Zero(img)
 #        vid.release()
-        gevent.sleep(1)
+#        scanner.dump_all_objects('dump.json')
+        gevent.sleep(4)
 
 
 def data_picture():
@@ -170,8 +174,6 @@ def data_picture():
     if not vid.isOpened():
         vid.open(-1)
     flag, im_array = vid.read()
-    print flag
-    print im_array
     img = cv.fromarray(im_array)
     cv.SaveImage('static/data.jpeg', img)
     cv.Zero(img)
@@ -184,7 +186,7 @@ def data_picture():
     print 'completed taking data picture'
 
 
-def run_gcode(code_path):
+def run_gcode(code_path, home=False):
     gevent.sleep(0)
     rep_rap = printcore()
     rep_rap.connect('/dev/ttyUSB0', 250000)
@@ -194,6 +196,9 @@ def run_gcode(code_path):
     # Remove comments and extra spaces
     lines = [x.split(';')[0].strip() for x in lines]
     print 'executing g code: %s' % lines
+    if home:
+        rep_rap.send_now('G28')
+        time.sleep(3)
     rep_rap.startprint(lines)
     time.sleep(1)
     # This isn't being applied (motors off).
