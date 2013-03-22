@@ -83,6 +83,21 @@ MyApp.prototype.start = function() {
                          function(err,resp){
       });
     });
+    this_app.picture_position_button.addEventListener('click',function(){
+      this_app.sendEvent('forward',{cmd: 'picture_position',uuid: this_app.myuuid},
+                         function(err,resp){
+      });
+    });
+    this_app.dot1_button.addEventListener('click',function(){
+      this_app.sendEvent('forward',{cmd: 'dot1',uuid: this_app.myuuid},
+                         function(err,resp){
+      });
+    });
+    this_app.dot2_button.addEventListener('click',function(){
+      this_app.sendEvent('forward',{cmd: 'dot2',uuid: this_app.myuuid},
+                         function(err,resp){
+      });
+    });
 
     this_app.dash.loadScript(
       "http://www.humblesoftware.com//static/js/flotr2.min.js",
@@ -139,6 +154,9 @@ MyApp.prototype.getAllElements = function(){
   this.y_down_button = this.getElement("y_down");
   this.z_up_button = this.getElement("z_up");
   this.z_down_button = this.getElement("z_down");
+  this.picture_position_button = this.getElement("picture_position");
+  this.dot1_button = this.getElement("dot1");
+  this.dot2_button = this.getElement("dot2");
 
 };
 
