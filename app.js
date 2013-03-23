@@ -5,6 +5,12 @@
 //////////////////////////////////// Sub Class /////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+/* We didn't change anything from the demo aside from adding more buttons
+   and get requests.*/
+// TODO: Implement D3 frontend for colony selection - display circles above
+// identified colonies, show default selections and allow manual deselctions.
+// TODO: Implement data collection / update - should record colonies / wells
+// that have been picked / inoculated.
 function MyApp(divobj,uuid,dash){
   this.myuuid = uuid;
   if (!divobj) {

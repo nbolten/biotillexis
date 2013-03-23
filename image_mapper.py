@@ -1,24 +1,18 @@
-def map_to_plate(x, y, reference_points=None):
-    # If given an input of four reference points (tuple or list),
-    # use them to generate the move. Otherwise, use a manually-determined
-    # set of baseline coordinates
-    if not reference_points:
-        ref1_pixels = (351, 118)
-        ref2_pixels = (894, 118)
-        ref3_pixels = (920, 608)
-        ref4_pixels = (334, 608)
-    else:
-        ref1_pixels = reference_points(0)
-        ref2_pixels = reference_points(1)
-        ref3_pixels = reference_points(2)
-        ref4_pixels = reference_points(4)
 
-    # Manually calibrated absolute coordinates for rep rap to move to
-    # each point
-    ref1_mm = (61, 87)
-    ref2_mm = (18, 87)
-    ref3_mm = (18, 125)
-    ref4_mm = (61, 125)
+
+def map_to_plate(x, y, reference_pixels, reference_mm):
+    '''Maps pixel xy coordinates to RepRap move coordinates, in mm. Requires
+       an input of the Rep Rap coordinates (mm) of each pink dot when
+       it's just below the pipet tip.'''
+
+    ref1_pixels = reference_pixels[0]
+    ref2_pixels = reference_pixels[1]
+    ref3_pixels = reference_pixels[2]
+    ref4_pixels = reference_pixels[4]
+    ref1_mm = reference_mm[0]
+    ref2_mm = reference_mm[1]
+    ref3_mm = reference_mm[2]
+    ref4_mm = reference_mm[3]
 
     # Find min / max points for x and y in both image pixels and mm
     x_max_ref_pixels = ref1_pixels[0]
@@ -30,7 +24,7 @@ def map_to_plate(x, y, reference_points=None):
     y_max_ref_mm = ref1_mm[1]
     y_min_ref_mm = ref3_mm[1]
 
-    # Find the distance between the min/max points fo the reference in
+    # Find the distance between the min/max points of the reference in
     # both pixels and mm
     x_span_pixels = x_max_ref_pixels - x_min_ref_pixels
     x_span_mm = x_max_ref_mm - x_min_ref_mm
@@ -38,13 +32,20 @@ def map_to_plate(x, y, reference_points=None):
     y_span_mm = y_max_ref_mm - y_min_ref_mm
 
     # Translate the input xy pixels coordinates into rep rap moves by
-    # interpolating - calculation assumes the references had a square shape
-    # that's aligned with the camera
+    # interpolating - calculation assumes the references have a square shape
+    # and are aligned with the camera
+    # TODO: are these functions redundant?
     def x_trans(x_point):
-        return -1* float(x_span_mm) / x_span_pixels * (x_max_ref_pixels - x_point) + x_max_ref_mm
+        ratio = float(x_span_mm) / x_span_pixels
+        difference = x_max_ref_pixels - x_point
+        adjustment = x_max_ref_mm
+        return -1 * ratio * difference + adjustment
 
     def y_trans(y_point):
-        return -1 * float(y_span_mm) / y_span_pixels * (y_max_ref_pixels - y_point) + y_max_ref_mm
+        ratio = float(y_span_mm) / y_span_pixels
+        difference = y_max_ref_pixels - y_point
+        adjustment = y_max_ref_mm
+        return -1 * ratio * difference + adjustment
 
     move_x = x_trans(x)
     move_y = y_trans(y)

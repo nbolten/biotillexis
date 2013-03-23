@@ -10,6 +10,7 @@ from track_color import track_color
 
 # Rep Rap Control
 from rep_rap_control import Printer
+from image_mapper import map_to_plate
 
 # Networking / server
 from netifaces import ifaddresses
@@ -28,14 +29,24 @@ from gevent.wsgi import WSGIServer
 
 gevent.monkey.patch_all(thread=False)
 
-
-# Settings - should probably go in a config
+# Settings - should go in a config eventually
+# Calibration settings:
+# Position (in Rep Rap mm) from which to take a calibration picture
+picture_home_position = (30, 73, 30)
+# Positions (in Rep Rap mm) where the pipet tip is directly above each
+# pink dot. The order is upper left, upper right, bottom right, bottom left.
+reference_points = [(50, 30, 0),
+                    (10, 27, 0),
+                    (10, 66, 0),
+                    (53, 66, 0)]
+# Device / network / manager settings
 app_js = 'app.js'
 app_html = 'app.html'
 device_uuid = str(uuid.uuid5(uuid.uuid1(), 'biotillexis'))
 device_status = 'ready'  # Alternative is 'logging'
-device_state = 'none'  # What is this?
-device_name = 'BioTillexis'
+device_state = 'none'  # Does not change (yet)
+device_name = 'biotillexis'
+# Strictly uses wlan0 for now
 device_ip = ifaddresses('wlan0')[2][0]['addr']
 device_port = 8432
 manager_ip = 'http://bioturk.ee.washington.edu'
@@ -56,11 +67,16 @@ printer = Printer()
 # Flask object to control routes, server
 app = Flask(__name__)
 
+
+# TODO: upon approval of colony selection, send cropped images of each colony
+# along with metadata to the manager
 # Routes - intercepts requests and routes them to functions / responses
 @app.route('/', methods=['GET', 'POST'])
 def index():
     '''Intercepts requests directly to root of the device. Processes
        specific GET and POST requests and ignores everything else'''
+    # TODO: reduce redundancy by making GET requests from the app
+    # use parameters (e.g. remove redundancies between x_up and x_down).
     action = request.args.get('cmd')
     print action
     if action == 'ping':
@@ -86,7 +102,7 @@ def index():
         device_logging.clear()
         return ''
     elif action == 'data_picture':
-        g.add(gevent.spawn(single_picture))
+        g.add(gevent.spawn(move_green))
     elif action == 'victoryLap':
         g.add(gevent.spawn(do_victory_lap))
         return ''
@@ -115,12 +131,12 @@ def index():
         g.add(gevent.spawn(picture_position))
         return ''
     elif action == 'dot1':
-        xy = map_to_plate(522, 218)
-        g.add(gevent.spawn(move_xyz(xy[0], xy[1], 4)))
+        xy = map_to_plate(522, 218, reference_points=reference_points)
+        g.add(gevent.spawn(move_xyz(xy, 0)))
         return ''
     elif action == 'dot2':
-        xy = map_to_plate(780, 356)
-        g.add(gevent.spawn(move_xyz(xy[0], xy[1], 4)))
+        xy = map_to_plate(780, 356, reference_points=reference_points)
+        g.add(gevent.spawn(move_xyz(xy, 0)))
         return ''
 
     else:
@@ -128,7 +144,10 @@ def index():
 
 
 # Functions (responses) that get run by routes
+# Logging:
 def start_logging():
+    '''Takes a picture using opencv and sends it to the manager
+       every 4 seconds.'''
     while device_logging.is_set():
         gevent.sleep(0)
         if not vid.isOpened():
@@ -153,7 +172,12 @@ def start_logging():
         gevent.sleep(4)
 
 
-def single_picture():
+# Rep Rap movement
+def move_green():
+    '''Acquires a picture, finds the locations of pink and green dots,
+       then moves to the positions of the green dots. Proper identification
+       of green dots is not yet working, nor is the move loop (which
+       should be straightforward).'''
     was_logging = device_logging.is_set()
     if was_logging:
         device_logging.clear()
@@ -174,6 +198,7 @@ def single_picture():
     print 'reference coordinates: {}'.format(coord_ref)
 
     coord, img_green = track_color(img, 'green')
+    print 'green dot coordinates: {}'.format(coord)
 
     cv2.imwrite('static/cam_tracked.jpeg', img_green)
     cmd_str = '/manager.php?action=storeBig&uuid='
@@ -182,16 +207,17 @@ def single_picture():
     image = handle.read()
     print 'Logging picture'
     r = requests.post(url, data=image)
-    print r.status_code
+    print 'Returned status code {}'.format(r.status_code)
     handle.close()
-
     vid.release()
-#    cv.Zero(img)
 
-    print 'completed taking data picture'
+    # TODO: move to green dots here using 'coord' variable and move.xyz
+    print 'Finished green dot loop'
 
 
 def run_gcode(code_path):
+    '''Helper function to send g code (Rep Rap movement language) to
+       the Rep Rap.'''
     gevent.sleep(0)
     printer.connect()
     gevent.sleep(0.1)
@@ -200,26 +226,30 @@ def run_gcode(code_path):
 
 
 def do_victory_lap():
+    '''Demo function - sets the rep rap on a loop around the bed.'''
     gevent.sleep(0)
     run_gcode('gcode/victory_lap.gcode')
 
 
 def do_home():
+    '''Homes the Rep Rap. Effectively recalibrates the Rep Rap's movements.'''
     gevent.sleep(0)
     printer.connect()
     printer.home()
     printer.disconnect()
 
 
-def move_xyz(x, y, z):
+def move_xyz(x, y, z, z_first=False):
+    '''Helper function to move to any arbitrary x, y, z location.'''
     gevent.sleep(0)
     printer.connect()
     time.sleep(0.1)
-    printer.move((x, y, z), z_first=False)
+    printer.move((x, y, z), z_first=z_first)
     printer.disconnect()
 
 
 def do_x_up():
+    '''Demo function - move the Rep Rap 10 units in the x direction.'''
     gevent.sleep(0)
     printer.connect()
     time.sleep(0.1)
@@ -230,49 +260,59 @@ def do_x_up():
 
 
 def do_x_down():
+    '''Demo function - move the Rep Rap -10 units in the x direction.'''
     gevent.sleep(0)
     printer.connect()
-    printer.move((-10,0,0), relative=True)
+    printer.move((-10, 0, 0), relative=True)
     printer.disconnect()
 
 
 def do_y_up():
+    '''Demo function - move the Rep Rap 10 units in the y direction.'''
     gevent.sleep(0)
     printer.connect()
-    printer.move((0,10,0), relative=True)
+    printer.move((0, 10, 0), relative=True)
     printer.disconnect()
 
 
 def do_y_down():
+    '''Demo function - move the Rep Rap -10 units in the y direction.'''
     gevent.sleep(0)
     printer.connect()
-    printer.move((0,-10,0), relative=True)
+    printer.move((0, -10, 0), relative=True)
     printer.disconnect()
 
 
 def do_z_up():
+    '''Demo function - move the Rep Rap 10 units in the z direction.'''
     gevent.sleep(0)
     printer.connect()
-    printer.move((0,0,10), relative=True)
+    printer.move((0, 0, 10), relative=True)
     printer.disconnect()
 
 
 def do_z_down():
+    '''Demo function - move the Rep Rap -10 units in the z direction.'''
     gevent.sleep(0)
     printer.connect()
-    printer.move((0,0,-10), relative=True)
+    printer.move((0, 0, -10), relative=True)
     printer.disconnect()
 
 
 def picture_position():
+    '''Moves the Rep Rap to a standardized location for acquiring a
+       calibration / homing image.'''
     gevent.sleep(0)
     printer.connect()
     printer.home()
-    printer.move((30,98,35))
+    printer.move(picture_home_position)
     printer.disconnect()
 
 
 def find_colonies():
+    '''This function will supercede move_green once colony identification
+       is working'''
+    # Pseudocode:
     # Move to picture position
     # Take picture
     # Run track_red, get back coordinates
@@ -283,50 +323,18 @@ def find_colonies():
     pass
 
 
-def map_to_plate(x, y):
-    dot1_pixels = (351, 118)
-    dot2_pixels = (894, 118)
-    dot3_pixels = (920, 608)
-    dot4_pixels = (334, 608)
-    dot1_mm = (61, 87)
-    dot2_mm = (18, 87)
-    dot3_mm = (18, 125)
-    dot4_mm = (61, 125)
-
-    x_max_ref_pixels = dot1_pixels[0]
-    x_min_ref_pixels = dot2_pixels[0]
-    x_max_ref_mm = dot1_mm[0]
-    x_min_ref_mm = dot2_mm[0]
-    y_max_ref_pixels = dot1_pixels[1]
-    y_min_ref_pixels = dot3_pixels[1]
-    y_max_ref_mm = dot1_mm[1]
-    y_min_ref_mm = dot3_mm[1]
-
-    x_span_pixels = x_max_ref_pixels - x_min_ref_pixels
-    x_span_mm = x_max_ref_mm - x_min_ref_mm
-    y_span_pixels = y_max_ref_pixels - y_min_ref_pixels
-    y_span_mm = y_max_ref_mm - y_min_ref_mm
-
-    def x_trans(x_point):
-        return -1* float(x_span_mm) / x_span_pixels * (x_max_ref_pixels - x_point) + x_max_ref_mm
-
-    def y_trans(y_point):
-        return -1 * float(y_span_mm) / y_span_pixels * (y_max_ref_pixels - y_point) + y_max_ref_mm
-
-    move_x = x_trans(x)
-    move_y = y_trans(y)
-    return (move_x, move_y)
-
-
 def pick_colonies(positions):
+    '''This function will have the rep rap pick colonies at inputted xy
+       coordinates.'''
     for x in positions:
         pass
     pass
 
 
-# Functions that are run at initialization
+# Server initialization functions
 def announce():
-    # Manually attach to bioturk manager
+    '''Attempts to connect to the manager every 3 seconds until the device
+       is acquired.'''
     while not device_acquired.is_set():
         gevent.sleep(3)
         payload = {'action': 'addDevice',
@@ -336,12 +344,16 @@ def announce():
 
 
 def start_server():
+    '''Starts a minimal Werkzeug server. This is not a robust server
+       and should be replaced eventually with something like CherryPy.'''
     print 'Starting server'
     http = WSGIServer(('', device_port), app)
     http.serve_forever()
 
 
 if __name__ == '__main__':
+    '''Launch the biotillexis device - start the server and send
+       an acquisition request to manager.'''
     g.add(gevent.spawn(announce))
     g.add(gevent.spawn(start_server))
     g.join()
