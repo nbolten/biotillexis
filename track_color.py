@@ -32,7 +32,7 @@ def track_color(img, color):
     hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     frame_threshed = cv2.inRange(hsv_img, color_min, color_max)
 
-    cv2.imwrite('output_thresholded.jpeg', frame_threshed)
+#    cv2.imwrite('output_thresholded.jpeg', frame_threshed)
     contours, hierarchy = cv2.findContours(frame_threshed,
                                            cv2.RETR_TREE,
                                            cv2.CHAIN_APPROX_SIMPLE)
