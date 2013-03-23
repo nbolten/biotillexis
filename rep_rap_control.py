@@ -1,6 +1,6 @@
 import time
 
-import printcore
+from printcore import printcore
 #from Printrun.printcore import printcore
 
 # TODO: Found the error that makes the printer inaccessible!

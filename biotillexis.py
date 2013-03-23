@@ -1,26 +1,25 @@
 # Built-in libraries
-#from os import environ
-import time
 import numpy
+import time
+import uuid
 
 # OpenCV
 import cv2.cv as cv
 import cv2
+from track_color import track_color
 
 # Rep Rap Control
 from rep_rap_control import Printer
 
-# Useful libraries
+# Networking / server
 from netifaces import ifaddresses
 import requests
-
-# Flask
 from flask import Flask
 from flask import jsonify
 from flask import request
 from flask import send_file
 
-# gevent
+# gevent - async i/o
 import gevent
 import gevent.monkey
 from gevent.pool import Group
@@ -29,42 +28,39 @@ from gevent.wsgi import WSGIServer
 
 gevent.monkey.patch_all(thread=False)
 
-app = Flask(__name__)
 
-# Settings that should probably go in a config
+# Settings - should probably go in a config
 app_js = 'app.js'
 app_html = 'app.html'
-
-#device_uuid = uuid.getnode() # This is better!
-device_uuid = 'e5223631-2e7e-5ff4-bbb4-223d4e45da63'
+device_uuid = str(uuid.uuid5(uuid.uuid1(), 'biotillexis'))
 device_status = 'ready'  # Alternative is 'logging'
 device_state = 'none'  # What is this?
 device_name = 'BioTillexis'
 device_ip = ifaddresses('wlan0')[2][0]['addr']
 device_port = 8432
-
 manager_ip = 'http://bioturk.ee.washington.edu'
 manager_port = '9090'
 
-# Events for global communication of greenlets
+# gevent globals
 device_acquired = Event()
-logging = Event()
-
-# gevent group - master group for adding new processes
+device_logging = Event()
+printing = Event()
 g = Group()
 
-# openCV - camera setup
+# openCV camera setup
 vid = cv2.VideoCapture(-1)
-#cam = cv.CaptureFromCAM(-1)
-#cv.SetCaptureProperty(cam, cv.CV_CAP_PROP_FRAME_WIDTH, 640)
-#cv.SetCaptureProperty(cam, cv.CV_CAP_PROP_FRAME_HEIGHT, 360)
 
 # initialize rep rap
 printer = Printer()
 
+# Flask object to control routes, server
+app = Flask(__name__)
+
 # Routes - intercepts requests and routes them to functions / responses
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    '''Intercepts requests directly to root of the device. Processes
+       specific GET and POST requests and ignores everything else'''
     action = request.args.get('cmd')
     print action
     if action == 'ping':
@@ -82,12 +78,12 @@ def index():
     elif action == 'getHTML':
         return send_file(app_html)
     elif action == 'startLog':
-        if not logging.is_set():
-            logging.set()
+        if not device_logging.is_set():
+            device_logging.set()
             g.add(gevent.spawn(start_logging))
         return ''
     elif action == 'stopLog':
-        logging.clear()
+        device_logging.clear()
         return ''
     elif action == 'data_picture':
         g.add(gevent.spawn(single_picture))
@@ -133,45 +129,34 @@ def index():
 
 # Functions (responses) that get run by routes
 def start_logging():
-    while logging.is_set():
+    while device_logging.is_set():
         gevent.sleep(0)
         if not vid.isOpened():
             vid.open(-1)
         vid.set(cv.CV_CAP_PROP_FRAME_WIDTH, 1280)
         vid.set(cv.CV_CAP_PROP_FRAME_HEIGHT, 720)
-        gevent.sleep(0)
+        gevent.sleep(0.05)
         flag, im_array = vid.read()
-        gevent.sleep(0)
         img = cv.fromarray(im_array)
-        gevent.sleep(0)
+        gevent.sleep(0.05)
         cv.SaveImage('static/cam.jpeg', img)
-        gevent.sleep(0)
         cmd_str = '/manager.php?action=storeBig&uuid='
-        gevent.sleep(0)
         url = manager_ip + ':' + manager_port + cmd_str + device_uuid
-        gevent.sleep(0)
         handle = open('static/cam.jpeg', 'rb')
-        gevent.sleep(0)
         image = handle.read()
-        gevent.sleep(0)
         print 'Logging picture'
-        gevent.sleep(0)
         r = requests.post(url, data=image)
-        gevent.sleep(0)
         print r.status_code
-        gevent.sleep(0)
         handle.close()
-        gevent.sleep(0)
         cv.Zero(img)
-        gevent.sleep(0)
         vid.release()
         gevent.sleep(4)
 
 
 def single_picture():
-    was_logging = logging.is_set()
+    was_logging = device_logging.is_set()
     if was_logging:
-        logging.clear()
+        device_logging.clear()
 
     if not vid.isOpened():
         vid.open(-1)
@@ -185,26 +170,22 @@ def single_picture():
 
     img = cv2.imread('static/cam_home.jpeg')
 
-    print 'thresholding green'
-    GREEN_MIN = numpy.array([70, 210, 100],numpy.uint8)
-    GREEN_MAX = numpy.array([100, 250, 200],numpy.uint8)
-    hsv_img = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
-    frame_threshed = cv2.inRange(hsv_img, GREEN_MIN, GREEN_MAX)
-    print 'finding contours'
-    contours, hierarchy = cv2.findContours(frame_threshed,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-    cv2.drawContours(img,contours,-1,(0,255,0),5)
-    print 'writing image'
-    cv2.imwrite('static/cam.jpeg', img)
+    coord_ref, img_ref = track_color(img, 'pink')
+    print 'reference coordinates: {}'.format(coord_ref)
 
+    coord, img_green = track_color(img, 'green')
+
+    cv2.imwrite('static/cam_tracked.jpeg', img_green)
     cmd_str = '/manager.php?action=storeBig&uuid='
     url = manager_ip + ':' + manager_port + cmd_str + device_uuid
-    handle = open('static/cam.jpeg', 'rb')
+    handle = open('static/cam_tracked.jpeg', 'rb')
     image = handle.read()
     print 'Logging picture'
     r = requests.post(url, data=image)
     print r.status_code
     handle.close()
 
+    vid.release()
 #    cv.Zero(img)
 
     print 'completed taking data picture'
